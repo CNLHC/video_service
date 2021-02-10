@@ -8,22 +8,30 @@ import (
 
 type TaskMeta map[string]interface{}
 type TaskStatus struct {
-	Progress int
-	Status   string
-	StartAt  time.Time
-	ETA      time.Duration
+	IsRunning bool
+	Progress  int
+	Status    string
+	StartAt   time.Time
+	ETA       time.Duration
 }
+
 type TaskCallback func(c AsyncTask)
+
+const (
+	EventProgress = "Progress"
+	EventDone     = "Done"
+)
 
 type AsyncTask interface {
 	GetId() uuid.UUID
 	GetMeta(key string) (interface{}, bool)
 
 	SetMeta(key string, item interface{})
-	SetCallback(fn TaskCallback)
+	SetCallback(event string, fn TaskCallback)
+
+	Init(cfg interface{})
 
 	Start() error
-	Pause() error
 	Terminate() error
 	GetStatus() TaskStatus
 }
