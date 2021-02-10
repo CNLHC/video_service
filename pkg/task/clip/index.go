@@ -1,4 +1,9 @@
 package clip
 
-type Clip struct {
+import (
+	"argus/video/pkg/task"
+)
+
+type ClipTask struct {
+	task.BaseTask
 }

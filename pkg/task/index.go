@@ -17,8 +17,7 @@ type TaskCallback func(c AsyncTask)
 
 type AsyncTask interface {
 	GetId() uuid.UUID
-	GetMeta(key string) interface{}
-	GetStatus() TaskStatus
+	GetMeta(key string) (interface{}, bool)
 
 	SetMeta(key string, item interface{})
 	SetCallback(fn TaskCallback)
@@ -26,8 +25,5 @@ type AsyncTask interface {
 	Start() error
 	Pause() error
 	Terminate() error
-}
-
-type BaseTask struct {
-	TaskId uuid.UUID
+	GetStatus() TaskStatus
 }
