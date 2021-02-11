@@ -1,4 +1,4 @@
-package clip
+package ffmpeg
 
 import (
 	"argus/video/pkg/task"
@@ -6,7 +6,6 @@ import (
 	"errors"
 	_ "errors"
 	"fmt"
-	_ "io"
 	"io/ioutil"
 	"net"
 	"os/exec"
@@ -19,29 +18,22 @@ var (
 	ErrTaskNotStart = errors.New("Task not start")
 )
 
-type ClipTask struct {
+type FFMPEGTask struct {
 	task.BaseTask
-	Cfg           ClipTaskCfg
 	progress_sock net.Listener
 	cmd           *exec.Cmd
 	Stats         utils.FFMpegStats
+	Flags         []string
 }
 
-type ClipTaskCfg struct {
-	Src       string
-	Dest      string
-	ClipStart time.Duration
-	ClipEnd   time.Duration
-}
-
-func (c *ClipTask) Terminate() error {
+func (c *FFMPEGTask) Terminate() error {
 	if c.cmd == nil {
 		return ErrTaskNotStart
 	}
 	return c.cmd.Process.Kill()
 }
 
-func (c *ClipTask) Start() error {
+func (c *FFMPEGTask) Start() error {
 	c.StartAt = time.Now()
 	var (
 		ln  net.Listener
@@ -57,19 +49,7 @@ func (c *ClipTask) Start() error {
 	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
 
 	log.Info().Msgf("Clip Task %s:  Listen at %s", c.GetId().String(), url)
-	cmd := exec.Command("ffmpeg",
-		"-ss",
-		fmt.Sprintf("%d", int(c.Cfg.ClipStart.Seconds())),
-		"-t",
-		fmt.Sprintf("%d", int(c.Cfg.ClipEnd.Seconds())),
-		"-i",
-		fmt.Sprintf("%s", c.Cfg.Src),
-		"-progress",
-		url,
-		"-codec",
-		"copy",
-		"-y",
-		c.Cfg.Dest)
+	cmd := exec.Command("ffmpeg", c.Flags...)
 	c.cmd = cmd
 
 	log.Printf("cmd:%s", cmd.String())
@@ -105,7 +85,7 @@ func (c *ClipTask) Start() error {
 	return nil
 }
 
-func (c *ClipTask) wait() {
+func (c *FFMPEGTask) wait() {
 	var (
 		buf = make([]byte, 1024)
 	)
@@ -138,14 +118,7 @@ func (c *ClipTask) wait() {
 	}
 }
 
-func (c *ClipTask) Init(cfg interface{}) {
-	switch cfg.(type) {
-	case ClipTaskCfg:
-		c.Cfg = cfg.(ClipTaskCfg)
-	}
-}
-
-func (c *ClipTask) isRunned() bool {
+func (c *FFMPEGTask) isRunned() bool {
 	if c.cmd == nil {
 		return false
 	}
@@ -155,34 +128,27 @@ func (c *ClipTask) isRunned() bool {
 	return true
 }
 
-func (c *ClipTask) isRunning() bool {
+func (c *FFMPEGTask) isRunning() bool {
 	if !c.isRunned() {
 		return false
 	}
 	return !c.cmd.ProcessState.Exited()
 }
 
-func (c *ClipTask) getProgress() int {
+func (c *FFMPEGTask) getProgress() int {
 	return 0
 }
 
-func (c *ClipTask) getETA() time.Duration {
+func (c *FFMPEGTask) getETA() time.Duration {
 	return 0
 }
 
-func (c *ClipTask) GetStatus() task.TaskStatus {
+func (c *FFMPEGTask) GetStatus() task.TaskStatus {
 	return task.TaskStatus{
 		IsRunning: c.isRunning(),
 		Progress:  c.getProgress(),
 		StartAt:   c.StartAt,
 		Status:    "",
 		ETA:       c.getETA(),
-	}
-}
-
-func NewClipTask(cfg ClipTaskCfg) *ClipTask {
-	return &ClipTask{
-		Cfg:      cfg,
-		BaseTask: task.NewBaseTask(),
 	}
 }
