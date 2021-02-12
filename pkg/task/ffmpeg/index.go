@@ -49,10 +49,11 @@ func (c *FFMPEGTask) Start() error {
 
 	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
 
-	log.Info().Msgf("Clip Task %s:  Listen at %s", c.GetId().String(), url)
 	c.Flags = append(c.Flags, "-progress", url)
 	cmd := exec.Command("ffmpeg", c.Flags...)
 	c.cmd = cmd
+
+	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url, cmd.String())
 
 	log.Printf("cmd:%s", cmd.String())
 
@@ -87,11 +88,12 @@ func (c *FFMPEGTask) Start() error {
 	return nil
 }
 
-func (c *FFMPEGTask) Init(cfg interface{}) {
+func (c *FFMPEGTask) Init(cfg interface{}) error {
 	switch cfg.(type) {
 	case []string:
 		c.Flags = cfg.([]string)
 	}
+	return nil
 }
 
 func (c *FFMPEGTask) wait() {

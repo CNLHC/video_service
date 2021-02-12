@@ -1,0 +1,9 @@
+{
+    "Type":"Clip",
+    "Cfg":{
+        "Src":"/root/Project/argus_video_management/data/index.mp4",
+        "Dest":"/root/Project/argus_video_management/data/out.mp4",
+        "ClipStart":"0",
+        "ClipEnd":"30"
+    }
+}

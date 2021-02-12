@@ -11,7 +11,6 @@ import (
 	_ "io/ioutil"
 	"net"
 	"os/exec"
-	"time"
 
 	_ "github.com/rs/zerolog/log"
 )
@@ -31,19 +30,19 @@ type ClipTask struct {
 type ClipTaskCfg struct {
 	Src       string
 	Dest      string
-	ClipStart time.Duration
-	ClipEnd   time.Duration
+	ClipStart string
+	ClipEnd   string
 }
 
-func (c *ClipTask) Init(cfg interface{}) {
+func (c *ClipTask) Init(cfg interface{}) error {
 	switch cfg.(type) {
 	case ClipTaskCfg:
 		c.Cfg = cfg.(ClipTaskCfg)
 		c.FFMPEGTask.Flags = []string{
 			"-ss",
-			fmt.Sprintf("%d", int(c.Cfg.ClipStart.Seconds())),
+			c.Cfg.ClipStart,
 			"-t",
-			fmt.Sprintf("%d", int(c.Cfg.ClipEnd.Seconds())),
+			c.Cfg.ClipEnd,
 			"-i",
 			fmt.Sprintf("%s", c.Cfg.Src),
 			"-codec",
@@ -54,6 +53,7 @@ func (c *ClipTask) Init(cfg interface{}) {
 		c.BaseTask = task.NewBaseTask()
 
 	}
+	return nil
 }
 
 func NewClipTask(cfg ClipTaskCfg) (res *ClipTask) {

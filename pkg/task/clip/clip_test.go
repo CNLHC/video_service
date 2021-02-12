@@ -4,7 +4,6 @@ import (
 	"argus/video/pkg/utils/video"
 	"os"
 	"testing"
-	"time"
 )
 
 func TestClipBasic(t *testing.T) {
@@ -13,8 +12,8 @@ func TestClipBasic(t *testing.T) {
 	task := NewClipTask(ClipTaskCfg{
 		Src:       "/root/Project/argus_video_management/data/index.mp4",
 		Dest:      dest,
-		ClipStart: time.Duration(0 * time.Second),
-		ClipEnd:   time.Duration(30 * time.Second),
+		ClipStart: "0",
+		ClipEnd:   "30",
 	})
 
 	task.Start()

@@ -29,7 +29,7 @@ type AsyncTask interface {
 	SetMeta(key string, item interface{})
 	SetCallback(event string, fn TaskCallback)
 
-	Init(cfg interface{})
+	Init(cfg interface{}) error
 
 	Start() error
 	Terminate() error
