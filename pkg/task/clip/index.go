@@ -2,17 +2,18 @@ package clip
 
 import (
 	"argus/video/pkg/task"
+	"argus/video/pkg/task/ffmpeg"
 	"argus/video/pkg/utils"
 	"errors"
 	_ "errors"
 	"fmt"
 	_ "io"
-	"io/ioutil"
+	_ "io/ioutil"
 	"net"
 	"os/exec"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	_ "github.com/rs/zerolog/log"
 )
 
 var (
@@ -20,7 +21,7 @@ var (
 )
 
 type ClipTask struct {
-	task.BaseTask
+	ffmpeg.FFMPEGTask
 	Cfg           ClipTaskCfg
 	progress_sock net.Listener
 	cmd           *exec.Cmd
@@ -34,155 +35,29 @@ type ClipTaskCfg struct {
 	ClipEnd   time.Duration
 }
 
-func (c *ClipTask) Terminate() error {
-	if c.cmd == nil {
-		return ErrTaskNotStart
-	}
-	return c.cmd.Process.Kill()
-}
-
-func (c *ClipTask) Start() error {
-	c.StartAt = time.Now()
-	var (
-		ln  net.Listener
-		err error
-	)
-
-	ln, err = net.Listen("tcp", "127.0.0.1:0")
-	c.progress_sock = ln
-	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
-
-	log.Info().Msgf("Clip Task %s:  Listen at %s", c.GetId().String(), url)
-	cmd := exec.Command("ffmpeg",
-		"-ss",
-		fmt.Sprintf("%d", int(c.Cfg.ClipStart.Seconds())),
-		"-t",
-		fmt.Sprintf("%d", int(c.Cfg.ClipEnd.Seconds())),
-		"-i",
-		fmt.Sprintf("%s", c.Cfg.Src),
-		"-progress",
-		url,
-		"-codec",
-		"copy",
-		"-y",
-		c.Cfg.Dest)
-	c.cmd = cmd
-
-	log.Printf("cmd:%s", cmd.String())
-
-	var outBuf []byte
-	var errBuf []byte
-	reader, err := cmd.StderrPipe()
-	if err != nil {
-		log.Error().Msgf("%s", err.Error())
-	}
-	outReader, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Error().Msgf("%s", err.Error())
-	}
-	err = cmd.Start()
-	if err != nil {
-		log.Error().Msgf("%s", err.Error())
-	}
-	go c.wait()
-
-	if err != nil {
-		log.Error().Msgf("%s", err.Error())
-	}
-	outBuf, _ = ioutil.ReadAll(outReader)
-	errBuf, _ = ioutil.ReadAll(reader)
-	_ = outBuf
-	_ = errBuf
-	//log.Printf("output %s", string(outBuf))
-	//log.Printf("error %s", string(errBuf))
-	log.Printf("code %d", cmd.ProcessState.ExitCode())
-	cmd.Wait()
-
-	return nil
-}
-
-func (c *ClipTask) wait() {
-	var (
-		buf = make([]byte, 1024)
-	)
-	conn, err := c.progress_sock.Accept()
-	defer conn.Close()
-	log.Info().Msgf("Accept Connection %s", conn.RemoteAddr().String())
-	if err != nil {
-		// handle error
-		log.Error().Msg(err.Error())
-	}
-	for {
-		n, err := conn.Read(buf)
-		if n > 0 {
-			c.Stats = c.Stats.Parse(string(buf[:n]))
-			if fns, ok := c.Callback[task.EventProgress]; ok {
-				for _, fn := range fns {
-					if fn != nil {
-						fn(c)
-					}
-				}
-			}
-			log.Printf("%+v", c.Stats)
-		} else {
-			continue
-		}
-		if err != nil {
-			log.Printf("err: %s", err.Error())
-			return
-		}
-	}
-}
-
 func (c *ClipTask) Init(cfg interface{}) {
 	switch cfg.(type) {
 	case ClipTaskCfg:
 		c.Cfg = cfg.(ClipTaskCfg)
+		c.FFMPEGTask.Flags = []string{
+			"-ss",
+			fmt.Sprintf("%d", int(c.Cfg.ClipStart.Seconds())),
+			"-t",
+			fmt.Sprintf("%d", int(c.Cfg.ClipEnd.Seconds())),
+			"-i",
+			fmt.Sprintf("%s", c.Cfg.Src),
+			"-codec",
+			"copy",
+			"-y",
+			c.Cfg.Dest,
+		}
+		c.BaseTask = task.NewBaseTask()
+
 	}
 }
 
-func (c *ClipTask) isRunned() bool {
-	if c.cmd == nil {
-		return false
-	}
-	if c.cmd.ProcessState == nil {
-		return false
-	}
-	return true
-}
-
-func (c *ClipTask) isRunning() bool {
-	if !c.isRunned() {
-		return false
-	}
-	return !c.cmd.ProcessState.Exited()
-}
-
-func (c *ClipTask) getProgress() int {
-	return 0
-}
-
-func (c *ClipTask) getETA() time.Duration {
-	return 0
-}
-
-func (c *ClipTask) GetStatus() task.TaskStatus {
-	return task.TaskStatus{
-		IsRunning: c.isRunning(),
-		Progress:  c.getProgress(),
-		StartAt:   c.StartAt,
-		Status:    "",
-		ETA:       c.getETA(),
-	}
-}
-
-func NewClipTask(cfg ClipTaskCfg) *ClipTask {
-	return &ClipTask{
-		Cfg:      cfg,
-		BaseTask: task.NewBaseTask(),
-	}
+func NewClipTask(cfg ClipTaskCfg) (res *ClipTask) {
+	res = &ClipTask{Cfg: cfg}
+	res.Init(cfg)
+	return res
 }

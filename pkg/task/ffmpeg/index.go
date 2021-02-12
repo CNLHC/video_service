@@ -35,6 +35,7 @@ func (c *FFMPEGTask) Terminate() error {
 
 func (c *FFMPEGTask) Start() error {
 	c.StartAt = time.Now()
+	log.Info().Msgf("%s start at %s", c.GetId(), c.StartAt)
 	var (
 		ln  net.Listener
 		err error
@@ -49,6 +50,7 @@ func (c *FFMPEGTask) Start() error {
 	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
 
 	log.Info().Msgf("Clip Task %s:  Listen at %s", c.GetId().String(), url)
+	c.Flags = append(c.Flags, "-progress", url)
 	cmd := exec.Command("ffmpeg", c.Flags...)
 	c.cmd = cmd
 
@@ -83,6 +85,13 @@ func (c *FFMPEGTask) Start() error {
 	cmd.Wait()
 
 	return nil
+}
+
+func (c *FFMPEGTask) Init(cfg interface{}) {
+	switch cfg.(type) {
+	case []string:
+		c.Flags = cfg.([]string)
+	}
 }
 
 func (c *FFMPEGTask) wait() {
