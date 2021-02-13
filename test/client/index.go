@@ -29,15 +29,26 @@ func main() {
 	defer nc.Close()
 
 	// Send the request
-	msg, err := nc.Request("updates", input_data, 10*time.Second)
+	err = nc.PublishRequest("updates", "test", input_data)
+	sub, err := nc.SubscribeSync("test")
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Use the response
-	log.Printf("Reply: %s", string(msg.Data))
+	max := 100 * time.Second
+	start := time.Now()
+	for time.Now().Sub(start) < max {
+		msg, err := sub.NextMsg(1 * time.Second)
+		if err != nil {
+			break
+		}
 
+		log.Printf("Reply: %s", string(msg.Data))
+	}
+
+	sub.Unsubscribe()
+	// Use the response
 	// Close the connection
 	nc.Close()
-
 }

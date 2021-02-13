@@ -3,16 +3,14 @@ package clip
 import (
 	"argus/video/pkg/task"
 	"argus/video/pkg/task/ffmpeg"
-	"argus/video/pkg/utils"
 	"errors"
 	_ "errors"
 	"fmt"
 	_ "io"
 	_ "io/ioutil"
-	"net"
-	"os/exec"
+	"reflect"
 
-	_ "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -21,10 +19,7 @@ var (
 
 type ClipTask struct {
 	ffmpeg.FFMPEGTask
-	Cfg           ClipTaskCfg
-	progress_sock net.Listener
-	cmd           *exec.Cmd
-	Stats         utils.FFMpegStats
+	Cfg ClipTaskCfg
 }
 
 type ClipTaskCfg struct {
@@ -51,9 +46,12 @@ func (c *ClipTask) Init(cfg interface{}) error {
 			c.Cfg.Dest,
 		}
 		c.BaseTask = task.NewBaseTask()
+		return nil
+	default:
+		log.Error().Msgf("wrong type for clip %+v", reflect.TypeOf(cfg))
 
 	}
-	return nil
+	return task.ErrWrongCfg
 }
 
 func NewClipTask(cfg ClipTaskCfg) (res *ClipTask) {

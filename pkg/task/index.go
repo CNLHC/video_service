@@ -1,6 +1,7 @@
 package task
 
 import (
+	"errors"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -20,6 +21,12 @@ type TaskCallback func(c AsyncTask)
 const (
 	EventProgress = "Progress"
 	EventDone     = "Done"
+)
+
+var (
+	ErrWrongCfg      = errors.New("WrongCfg")
+	ErrNotAvailable  = errors.New("Not available")
+	ErrUpstreamError = errors.New("Upstream Error")
 )
 
 type AsyncTask interface {

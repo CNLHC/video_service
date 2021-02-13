@@ -2,10 +2,12 @@ package message
 
 import (
 	"argus/video/pkg/task"
+	"argus/video/pkg/task/capture"
 	"argus/video/pkg/task/clip"
 	"encoding/json"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
 	nats "github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
 )
@@ -51,6 +53,8 @@ func (c *Subscriber) Subscribe() (err error) {
 				log.Error().Msgf("error msg %s", err.Error())
 			}
 			LaunchTaskAndWait(&doorbell, p)
+		} else {
+			log.Error().Msgf("error on msg err:%v msg:%s", err, string(msg.Data))
 		}
 	}
 
@@ -59,27 +63,28 @@ func (c *Subscriber) Subscribe() (err error) {
 
 func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 	var err error
+
 	switch doorbell.Type {
 	case TypeClip:
 		log.Info().Msgf("handle clip task %+v", doorbell)
-		var (
-			cfg clip.ClipTaskCfg
-		)
-		temp, _ := json.Marshal(doorbell.Cfg)
-		err = json.Unmarshal(temp, &cfg)
-		if err != nil {
-			goto errHandle
-		}
-		t := &clip.ClipTask{}
-		t.Init(cfg)
-		cb := publisher.GetCallback()
-		t.SetCallback(task.EventDone, cb)
-		t.SetCallback(task.EventProgress, cb)
-		t.Start()
+		err = runTask(
+			&clip.ClipTask{},
+			clip.ClipTaskCfg{},
+			doorbell,
+			publisher)
+
 	case TypeCapture:
-		goto errHandle
+		log.Info().Msgf("handle clip task %+v", doorbell)
+		err = runTask(
+			&capture.CaptureTask{},
+			capture.CaptureTaskCfg{},
+			doorbell,
+			publisher)
 
 	default:
+		goto errHandle
+	}
+	if err != nil {
 		goto errHandle
 	}
 	return
@@ -87,4 +92,20 @@ errHandle:
 	buf, _ := json.Marshal(&MsgResp{Code: -1, Msg: err.Error()})
 	publisher.Publish(buf)
 	return
+}
+
+func runTask(t task.AsyncTask, cfg interface{}, doorbell *TaskDoorbell, publisher Publisher) (err error) {
+	err = mapstructure.Decode(doorbell.Cfg, &cfg)
+	if err != nil {
+		return err
+	}
+	err = t.Init(cfg)
+	if err != nil {
+		return err
+	}
+	cb := publisher.GetCallback()
+	t.SetCallback(task.EventDone, cb)
+	t.SetCallback(task.EventProgress, cb)
+	err = t.Start()
+	return err
 }

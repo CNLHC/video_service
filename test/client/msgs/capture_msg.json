@@ -1,0 +1,8 @@
+{
+    "Type":"Capture",
+    "Cfg":{
+        "Src":"/root/Project/argus_video_management/data/index.mp4",
+        "Dest":"/root/Project/argus_video_management/data/thumb%05d.jpg",
+        "ThumbnailCounts":15
+    }
+}
