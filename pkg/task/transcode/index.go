@@ -36,6 +36,7 @@ func (c *VodTranscode) Start() error {
 		return errors.Wrap(task.ErrUpstreamError, err.Error())
 	}
 	c.VodJobId = response.TranscodeTaskId
+	c.poll()
 	return nil
 }
 
@@ -61,24 +62,33 @@ func (c *VodTranscode) poll() (err error) {
 			goto finish
 		}
 		c.parseVodStatus(response)
+		if !c.status.IsRunning {
+			goto finish
+		}
 		counter++
-
 	}
-
 finish:
-
 	return err
-
 }
 
 func (c *VodTranscode) parseVodStatus(resp *vod.GetTranscodeTaskResponse) (isTerminated bool) {
 	var totalProcess int64
 	for _, process := range resp.TranscodeTask.TranscodeJobInfoList {
-		totalProcess += process.TranscodeProgress
+		if process.TranscodeJobStatus == "Transcoding" {
+			totalProcess += process.TranscodeProgress
+		} else if process.TranscodeJobStatus == "TranscodeSuccess" {
+			totalProcess += 100
+		}
 	}
 
-	c.status.Progress = resp.TranscodeTask.TranscodeJobInfoList
-
+	c.status.Progress = int(int(totalProcess) / len(resp.TranscodeTask.TranscodeJobInfoList))
+	c.status.Status = resp.TranscodeTask.TaskStatus
+	ts := c.status.Status
+	if ts == "Processing" || ts == "Partial" {
+		c.status.IsRunning = true
+	} else {
+		c.status.IsRunning = false
+	}
 	return isTerminated
 }
 
