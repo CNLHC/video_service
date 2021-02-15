@@ -36,7 +36,7 @@ func (c *XunfeiSDK) Prepare(req PrepareReq) (resp BaseResp, err error) {
 	return
 }
 
-func (c *XunfeiSDK) Upload(req TaskIdReq) (resp BaseResp, err error) {
+func (c *XunfeiSDK) Upload() (resp BaseResp, err error) {
 	file, err := os.Open(c.file_path)
 	if err != nil {
 		return
@@ -62,6 +62,7 @@ func (c *XunfeiSDK) Upload(req TaskIdReq) (resp BaseResp, err error) {
 		}
 		c.GetNextSliceId()
 		w = multipart.NewWriter(&b)
+		req := c.GetReq()
 		if reqmap, err = tomap(req); err != nil {
 			return
 		}
