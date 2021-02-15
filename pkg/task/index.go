@@ -27,6 +27,7 @@ var (
 	ErrWrongCfg      = errors.New("WrongCfg")
 	ErrNotAvailable  = errors.New("Not available")
 	ErrUpstreamError = errors.New("Upstream Error")
+	ErrTimeout       = errors.New("Timeout")
 )
 
 type AsyncTask interface {
