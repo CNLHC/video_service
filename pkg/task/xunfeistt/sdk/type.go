@@ -5,6 +5,8 @@ type XunfeiSDK struct {
 	file_path   string
 	cur_sliceid string
 	taskid      string
+	aid         string
+	sk          string
 	base        BaseReq
 }
 
@@ -37,8 +39,8 @@ type PrepareFullReq struct {
 }
 
 type BaseResp struct {
-	Ok     int64       `json:"ok"`
-	ErrNo  int64       `json:"err_no"`
-	Failed interface{} `json:"failed"`
-	Data   string      `json:"data"`
+	Ok     int64  `json:"ok"`
+	ErrNo  int64  `json:"err_no"`
+	Failed string `json:"failed"`
+	Data   string `json:"data"`
 }

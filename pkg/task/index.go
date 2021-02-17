@@ -16,6 +16,11 @@ type TaskStatus struct {
 	ETA       time.Duration
 }
 
+type TaskResult struct {
+	Err  error
+	Data interface{}
+}
+
 type TaskCallback func(c AsyncTask)
 
 const (
@@ -42,4 +47,5 @@ type AsyncTask interface {
 	Start() error
 	Terminate() error
 	GetStatus() TaskStatus
+	GetResult() TaskResult
 }

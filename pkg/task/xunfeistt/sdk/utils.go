@@ -6,16 +6,21 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	_ "fmt"
 	"math"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const SliceSize = 10485760
 
+func (c *XunfeiSDK) SetTaskID(id string) {
+	c.taskid = id
+}
 func (c *XunfeiSDK) GetNextSliceId() string {
 	t := []byte(c.cur_sliceid)
 	j := len(t) - 1
@@ -33,28 +38,30 @@ func (c *XunfeiSDK) GetNextSliceId() string {
 }
 
 func (c *XunfeiSDK) ResetSliceId() {
-	c.cur_sliceid = "aaaaaaaaa"
+	c.cur_sliceid = "aaaaaaaaaa"
 }
 
 func (*XunfeiSDK) checkBaseResp(r BaseResp) error {
 	if r.Ok == 0 {
 		return nil
 	} else {
-		return errors.New("error")
+		msg := fmt.Sprintf("error %+v", r)
+		return errors.New(msg)
 	}
 }
 func (c *XunfeiSDK) getSliceNum(size int64) int64 {
-	return int64(math.Ceil(float64(size) / float64(size)))
+	return int64(math.Ceil(float64(size) / float64(SliceSize)))
 }
 
 func (c *XunfeiSDK) GetPrepareReq() (resp PrepareFullReq, err error) {
 	fp, err := os.Open(c.file_path)
 	if err != nil {
+		err = errors.Wrap(err, c.file_path)
 		return
 	}
 	defer fp.Close()
 	info, err := fp.Stat()
-	if info != nil {
+	if err != nil {
 		return
 	}
 	size := info.Size()
@@ -67,6 +74,10 @@ func (c *XunfeiSDK) GetPrepareReq() (resp PrepareFullReq, err error) {
 }
 
 func (c *XunfeiSDK) GetReq() (resp TaskIdReq) {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	signa := signature(c.base.AppID, c.sk, ts)
+	c.base.Ts = ts
+	c.base.Signa = signa
 	resp.BaseReq = c.base
 	resp.TaskId = c.taskid
 	return
@@ -76,10 +87,14 @@ func GetXunfeiSDK(APPId string, sk string, file_path string) (resp *XunfeiSDK, e
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	_, err = os.Lstat(file_path)
 	if err != nil {
+		err = errors.Wrap(err, file_path)
 		return
 	}
 	resp = &XunfeiSDK{
-		BaseUrl: "https://raasr.xfyun.cn/api",
+		BaseUrl:   "http://raasr.xfyun.cn/api",
+		file_path: file_path,
+		aid:       APPId,
+		sk:        sk,
 		base: BaseReq{
 			AppID: APPId,
 			Ts:    ts,

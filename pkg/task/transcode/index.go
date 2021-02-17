@@ -92,8 +92,13 @@ func (c *VodTranscode) parseVodStatus(resp *vod.GetTranscodeTaskResponse) (isTer
 	return isTerminated
 }
 
-func Terminate() error {
+func (c *VodTranscode) Terminate() error {
 	return task.ErrNotAvailable
+}
+
+func (c *VodTranscode) GetResult() (resp task.TaskResult) {
+	resp.Err = nil
+	return
 }
 
 func (c *VodTranscode) GetStatus() task.TaskStatus {

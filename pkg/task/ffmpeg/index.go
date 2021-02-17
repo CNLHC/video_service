@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -49,7 +50,12 @@ func (c *FFMPEGTask) Start() error {
 
 	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
 
-	c.Flags = append(c.Flags, "-progress", url)
+	c.Flags = append(
+		c.Flags,
+		"-progress", url,
+		"-hide_banner",
+	)
+
 	cmd := exec.Command("ffmpeg", c.Flags...)
 	c.cmd = cmd
 
@@ -80,10 +86,20 @@ func (c *FFMPEGTask) Start() error {
 	errBuf, _ = ioutil.ReadAll(reader)
 	_ = outBuf
 	_ = errBuf
-	//log.Printf("output %s", string(outBuf))
-	//log.Printf("error %s", string(errBuf))
-	log.Printf("code %d", cmd.ProcessState.ExitCode())
+	log.Printf("output %s", string(outBuf))
+	log.Printf("error %s", string(errBuf))
 	cmd.Wait()
+
+	if strings.Contains(strings.ToLower(string(errBuf)), "error") {
+		err = errors.New("ffmpeg output contains error")
+		return err
+	}
+	exitcode := cmd.ProcessState.ExitCode()
+	log.Printf("code %d", exitcode)
+	if exitcode != 0 {
+		err = errors.New("ffmpeg has non-zero exit code")
+		return err
+	}
 
 	return nil
 }
@@ -162,4 +178,9 @@ func (c *FFMPEGTask) GetStatus() task.TaskStatus {
 		Status:    "",
 		ETA:       c.getETA(),
 	}
+}
+
+func (c *FFMPEGTask) GetResult() (resp task.TaskResult) {
+	resp.Err = nil
+	return
 }
