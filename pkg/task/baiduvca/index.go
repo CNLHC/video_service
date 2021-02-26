@@ -1,6 +1,7 @@
 package baiduvca
 
 import (
+	"argus/video/pkg/config"
 	"argus/video/pkg/task"
 	"time"
 
@@ -29,8 +30,8 @@ func (c *VCATask) Init(cfg interface{}) (err error) {
 	switch cfg.(type) {
 	case VCATaskCfg:
 		c.cfg = cfg.(VCATaskCfg)
-		AK, SK := "<your-access-key-id>", "<your-secret-access-key>"
-		ENDPOINT := "<domain-name>"
+		AK, SK := config.Get("Baidu_AK"), config.Get("Baidu_SK")
+		ENDPOINT := config.Get("Baidu_endpoint")
 		c.cli, err = vca.NewClient(AK, SK, ENDPOINT)
 		return err
 	default:
