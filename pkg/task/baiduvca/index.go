@@ -2,13 +2,20 @@ package baiduvca
 
 import (
 	"argus/video/pkg/config"
+	"argus/video/pkg/poller"
 	"argus/video/pkg/task"
+	"encoding/json"
+	"io/ioutil"
+	_ "os"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/baidubce/bce-sdk-go/bce"
 	"github.com/baidubce/bce-sdk-go/http"
 	"github.com/baidubce/bce-sdk-go/services/vca"
 	"github.com/baidubce/bce-sdk-go/services/vca/api"
+	"github.com/rs/zerolog/log"
 )
 
 type VCATask struct {
@@ -46,7 +53,31 @@ func (c *VCATask) Start() (err error) {
 	req.Preset = c.cfg.Preset
 	req.Notification = c.cfg.Notification
 
+	log.Info().Msgf("baidu_vca start putting media")
 	c.cli.PutMedia(&req)
+
+	log.Info().Msgf("baidu_vca start polling")
+	p := poller.GetBasicPoller(
+		5*time.Second,
+		time.Now().Add(200*time.Second),
+		func() (resp interface{}, err error) {
+			resp, err = GetMediaTempResult(c.cli, c.cfg.Source, "character")
+			return
+		},
+		func(resp interface{}) (err error) {
+			log.Debug().Msgf("task %s check  baidu resp %+v", c.GetId(), resp)
+			t := resp.(MiddleTypeResp)
+			if s, ok := t["source"]; ok {
+				if s == "FINISHED" {
+					return nil
+				}
+			} else {
+				err = errors.New("unfinished")
+			}
+			return
+		})
+
+	err = p.Start()
 
 	return err
 }
@@ -55,53 +86,38 @@ type MiddleTypeResp map[string]interface{}
 
 func GetMediaTempResult(cli bce.Client, source string, middle_type string) (mresp MiddleTypeResp, err error) {
 	req := &bce.BceRequest{}
-	req.SetUri("v2/media/" + middle_type)
+	req.SetUri("/v1/media/" + middle_type)
 	req.SetMethod(http.GET)
 	req.SetParam("source", source)
+	var (
+		msg []byte
+	)
 
 	// Send request and get response
 	resp := &bce.BceResponse{}
 	if err := cli.SendRequest(req, resp); err != nil {
+		t, _ := json.Marshal(resp.ServiceError())
+		json.Unmarshal(t, &mresp)
+
+		if resp.ServiceError().Message == "invalid media: media is PROCESSING" ||
+			resp.ServiceError().Message == "invalid media: media is PROVISIONING" {
+			return mresp, nil
+
+		}
 		return nil, err
 	}
-	if resp.IsFail() {
-		return nil, resp.ServiceError()
+
+	msg, err = ioutil.ReadAll(resp.Body())
+	if err != nil {
+		return
 	}
-	if err := resp.ParseJsonBody(mresp); err != nil {
+	defer resp.Body().Close()
+	if err := json.Unmarshal(msg, &mresp); err != nil {
 		return nil, err
 	}
+
 	return mresp, err
 }
-
-func (c *VCATask) poll() (resp MiddleTypeResp, err error) {
-	var (
-		interval = 3 * time.Second
-		max_iter = 1500
-		counter  = 0
-	)
-
-	ticker := time.NewTicker(interval)
-
-	for ; true; <-ticker.C {
-		counter += 1
-		resp, err = GetMediaTempResult(c.cli, c.cfg.Source, "character")
-		if err != nil {
-			return resp, err
-		}
-		if resp["status"] == "FINISHED" {
-			return resp, nil
-		}
-		if resp["status"] == "ERROR" {
-			return resp, task.ErrUpstreamError
-		}
-		if counter > max_iter {
-			return resp, task.ErrTimeout
-		}
-	}
-	return resp, err
-
-}
-
 func (c *VCATask) Terminate() (err error) {
 	return err
 }
