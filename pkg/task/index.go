@@ -10,7 +10,7 @@ import (
 type TaskMeta map[string]interface{}
 type TaskStatus struct {
 	IsRunning bool
-	Progress  int
+	Progress  float32
 	Status    string
 	StartAt   time.Time
 	ETA       time.Duration
@@ -26,6 +26,7 @@ type TaskCallback func(c AsyncTask)
 const (
 	EventProgress = "Progress"
 	EventDone     = "Done"
+	EventFail     = "Fail"
 )
 
 var (

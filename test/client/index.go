@@ -22,7 +22,7 @@ func main() {
 		log.Printf("can not read input from (%s)", msg_file)
 	}
 
-	nc, err := nats.Connect("localhost:24222")
+	nc, err := nats.Connect("core1.cnworkshop.xyz:24222")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -33,6 +33,7 @@ func (c *ClipTask) Init(cfg interface{}) error {
 	switch cfg.(type) {
 	case ClipTaskCfg:
 		c.Cfg = cfg.(ClipTaskCfg)
+		c.FFMPEGTask.Source = c.Cfg.Src
 		c.FFMPEGTask.Flags = []string{
 			"-ss",
 			c.Cfg.ClipStart,

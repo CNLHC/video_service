@@ -54,6 +54,7 @@ func (c *CaptureTask) Init(cfg interface{}) (err error) {
 		if err != nil {
 			return err
 		}
+		c.FFMPEGTask.Source = t.Src
 		c.FFMPEGTask.Flags = []string{
 			"-i", fmt.Sprintf("%s", t.Src),
 			"-r", fmt.Sprintf("%f", fps),

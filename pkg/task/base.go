@@ -30,6 +30,16 @@ func (c BaseTask) SetCallback(event string, fn TaskCallback) {
 	c.Callback[event] = append(c.Callback[event], fn)
 }
 
+func (c BaseTask) RunCallback(e string, status TaskStatus, task AsyncTask) {
+	if fns, ok := c.Callback[e]; ok {
+		for _, fn := range fns {
+			if fn != nil {
+				fn(task)
+			}
+		}
+	}
+}
+
 func NewBaseTask() BaseTask {
 	uuid, _ := uuid.NewV4()
 

@@ -1,6 +1,9 @@
 package utils
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 type FFMpegStats map[string]string
 
@@ -17,4 +20,15 @@ func (FFMpegStats) Parse(r string) (res FFMpegStats) {
 		}
 	}
 	return res
+}
+
+func (c FFMpegStats) GetOutputMs() (out int) {
+	if s, ok := c["out_time_ms"]; ok {
+		if i, err := strconv.Atoi(s); err != nil {
+			return -1
+		} else {
+			return i
+		}
+	}
+	return -1
 }

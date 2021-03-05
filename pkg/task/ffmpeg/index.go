@@ -3,16 +3,25 @@ package ffmpeg
 import (
 	"argus/video/pkg/task"
 	"argus/video/pkg/utils"
+	"argus/video/pkg/utils/video"
 	"errors"
 	_ "errors"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	StatusPreparing = "Preparing"
+	StatusRunning   = "Running"
+	StatusDone      = "Done"
+	StatusFail      = "Fail"
 )
 
 var (
@@ -21,10 +30,15 @@ var (
 
 type FFMPEGTask struct {
 	task.BaseTask
+
+	Source string
+	Stats  utils.FFMpegStats
+	Flags  []string
+
 	progress_sock net.Listener
+	status        task.TaskStatus
 	cmd           *exec.Cmd
-	Stats         utils.FFMpegStats
-	Flags         []string
+	meta          video.ProberResp
 }
 
 func (c *FFMPEGTask) Terminate() error {
@@ -35,12 +49,16 @@ func (c *FFMPEGTask) Terminate() error {
 }
 
 func (c *FFMPEGTask) Start() error {
-	c.StartAt = time.Now()
-	log.Info().Msgf("%s start at %s", c.GetId(), c.StartAt)
 	var (
 		ln  net.Listener
 		err error
 	)
+	c.StartAt = time.Now()
+	log.Info().Msgf("%s start at %s", c.GetId(), c.StartAt)
+	prober := video.Prober{}
+	if c.meta, err = prober.Probe(c.Source); err != nil {
+		return err
+	}
 
 	ln, err = net.Listen("tcp", "127.0.0.1:0")
 	c.progress_sock = ln
@@ -56,7 +74,10 @@ func (c *FFMPEGTask) Start() error {
 		"-hide_banner",
 	)
 
+	c.status.Status = StatusPreparing
 	cmd := exec.Command("ffmpeg", c.Flags...)
+
+	c.status.Status = StatusRunning
 	c.cmd = cmd
 
 	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url, cmd.String())
@@ -77,8 +98,8 @@ func (c *FFMPEGTask) Start() error {
 	if err != nil {
 		log.Error().Msgf("%s", err.Error())
 	}
-	go c.wait()
 
+	go c.wait()
 	if err != nil {
 		log.Error().Msgf("%s", err.Error())
 	}
@@ -89,19 +110,24 @@ func (c *FFMPEGTask) Start() error {
 	log.Printf("output %s", string(outBuf))
 	log.Printf("error %s", string(errBuf))
 	cmd.Wait()
-
-	if strings.Contains(strings.ToLower(string(errBuf)), "error") {
-		err = errors.New("ffmpeg output contains error")
-		return err
-	}
 	exitcode := cmd.ProcessState.ExitCode()
 	log.Printf("code %d", exitcode)
+	if strings.Contains(strings.ToLower(string(errBuf)), "error") {
+		err = errors.New("ffmpeg output contains error")
+		goto handleerror
+	}
 	if exitcode != 0 {
 		err = errors.New("ffmpeg has non-zero exit code")
-		return err
+		goto handleerror
 	}
 
+	c.status.Status = StatusDone
+	c.RunCallback(task.EventDone, c.status, c)
 	return nil
+handleerror:
+	c.status.Status = StatusFail
+	c.RunCallback(task.EventFail, c.status, c)
+	return err
 }
 
 func (c *FFMPEGTask) Init(cfg interface{}) error {
@@ -127,13 +153,7 @@ func (c *FFMPEGTask) wait() {
 		n, err := conn.Read(buf)
 		if n > 0 {
 			c.Stats = c.Stats.Parse(string(buf[:n]))
-			if fns, ok := c.Callback[task.EventProgress]; ok {
-				for _, fn := range fns {
-					if fn != nil {
-						fn(c)
-					}
-				}
-			}
+			c.RunCallback(task.EventProgress, c.status, c)
 			log.Printf("%+v", c.Stats)
 		} else {
 			continue
@@ -162,8 +182,39 @@ func (c *FFMPEGTask) isRunning() bool {
 	return !c.cmd.ProcessState.Exited()
 }
 
-func (c *FFMPEGTask) getProgress() int {
-	return 0
+func (c *FFMPEGTask) getEndMs() int {
+	tidx := -1
+	for idx, element := range c.Flags {
+		if element == "-t" {
+			tidx = idx
+		}
+	}
+	if tidx >= 0 {
+		endInSec, err := strconv.Atoi(c.Flags[tidx+1])
+		if err == nil {
+			return endInSec * 1000
+		}
+	}
+
+	if s, err := strconv.ParseFloat(c.meta.Format.Duration, 32); err != nil {
+		return 0
+	} else {
+		return int(s * 1000)
+	}
+}
+
+func (c *FFMPEGTask) getProgress() (progress float32) {
+	cur := c.Stats.GetOutputMs()
+	end := c.getEndMs()
+	if end != 0 && cur >= 0 {
+		progress = 100 * float32(cur) / float32(end) / 1000
+		if progress >= 100 && c.status.Status != StatusDone {
+			progress = 99.9
+		}
+	} else {
+		progress = -1
+	}
+	return progress
 }
 
 func (c *FFMPEGTask) getETA() time.Duration {
@@ -171,13 +222,12 @@ func (c *FFMPEGTask) getETA() time.Duration {
 }
 
 func (c *FFMPEGTask) GetStatus() task.TaskStatus {
-	return task.TaskStatus{
-		IsRunning: c.isRunning(),
-		Progress:  c.getProgress(),
-		StartAt:   c.StartAt,
-		Status:    "",
-		ETA:       c.getETA(),
-	}
+
+	c.status.IsRunning = c.isRunning()
+	c.status.Progress = c.getProgress()
+	c.status.StartAt = c.StartAt
+	c.status.ETA = c.getETA()
+	return c.status
 }
 
 func (c *FFMPEGTask) GetResult() (resp task.TaskResult) {

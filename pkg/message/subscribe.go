@@ -5,7 +5,6 @@ import (
 	"argus/video/pkg/task/capture"
 	"argus/video/pkg/task/clip"
 	"encoding/json"
-	"time"
 
 	"github.com/mitchellh/mapstructure"
 	nats "github.com/nats-io/nats.go"
@@ -34,31 +33,33 @@ func errorHandler(nc *nats.Conn, s *nats.Subscription, err error) {
 	log.Error().Msgf("msg error %+v", err)
 
 }
+func msgHandler(msg *nats.Msg) {
+	var (
+		err error
+	)
+
+	log.Info().Msgf("receive msg %s", string(msg.Data))
+	var doorbell TaskDoorbell
+	p := Publisher{Msg: msg}
+	err = json.Unmarshal(msg.Data, &doorbell)
+	if err != nil {
+		log.Error().Msgf("error msg %s", err.Error())
+	}
+	LaunchTaskAndWait(&doorbell, p)
+}
 
 func (c *Subscriber) Subscribe() (err error) {
 	nc, err := nats.Connect(
-		"localhost:24222",
+		"core1.cnworkshop.xyz:24222",
 		nats.ErrorHandler(errorHandler))
 
+	nc.QueueSubscribe("updates", "default", msgHandler)
+
 	c.sub, err = nc.SubscribeSync("updates")
-
-	for {
-		msg, err := c.sub.NextMsg(10 * time.Second)
-		if err == nil {
-			log.Info().Msgf("receive msg %s", string(msg.Data))
-			var doorbell TaskDoorbell
-			p := Publisher{Msg: msg}
-			err = json.Unmarshal(msg.Data, &doorbell)
-			if err != nil {
-				log.Error().Msgf("error msg %s", err.Error())
-			}
-			LaunchTaskAndWait(&doorbell, p)
-		} else {
-			log.Error().Msgf("error on msg err:%v msg:%s", err, string(msg.Data))
-		}
+	if err != nil {
+		return
 	}
-
-	return err
+	return
 }
 
 func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
