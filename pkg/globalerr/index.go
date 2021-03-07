@@ -12,7 +12,7 @@ func GetGlobalErrorChan() chan error {
 	return errchan
 }
 
-func Listern() {
+func Listen() {
 	var err error
 	for {
 		err = <-errchan

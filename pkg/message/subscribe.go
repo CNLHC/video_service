@@ -1,12 +1,14 @@
 package message
 
 import (
-	"argus/video/pkg/controller"
+	_ "argus/video/pkg/controller"
+	"argus/video/pkg/globalerr"
 	"argus/video/pkg/task"
 	"argus/video/pkg/task/baiduvca"
 	"argus/video/pkg/task/capture"
 	"argus/video/pkg/task/clip"
 	"encoding/json"
+	"errors"
 
 	"github.com/mitchellh/mapstructure"
 	nats "github.com/nats-io/nats.go"
@@ -18,6 +20,10 @@ const (
 	TypeCapture = "Capture"
 	TypeVCA     = "VCA"
 	TypeSTT     = "STT"
+)
+
+var (
+	ErrUnknownTaskType = errors.New("Unknown TaskType")
 )
 
 type Subscriber struct {
@@ -42,24 +48,27 @@ func msgHandler(msg *nats.Msg) {
 		err error
 	)
 
-	log.Info().Msgf("receive msg %s", string(msg.Data))
+	log.Info().Msgf("receive msg: data(%s) respond:(%s)", string(msg.Data), msg.Reply)
 	var doorbell TaskDoorbell
 	p := Publisher{Msg: msg}
+
 	err = json.Unmarshal(msg.Data, &doorbell)
 	if err != nil {
 		log.Error().Msgf("error msg %s", err.Error())
+		return
 	}
+	_ = p
 	LaunchTaskAndWait(&doorbell, p)
 }
 
-func (c *Subscriber) Subscribe() (err error) {
+func (c *Subscriber) Subscribe() (sub *nats.Subscription, err error) {
 	nc, err := nats.Connect(
 		"core1.cnworkshop.xyz:24222",
 		nats.ErrorHandler(errorHandler))
 
-	nc.QueueSubscribe("updates", "default", msgHandler)
+	c.sub, err = nc.QueueSubscribe("updates", "default", msgHandler)
+	sub = c.sub
 
-	c.sub, err = nc.SubscribeSync("updates")
 	if err != nil {
 		return
 	}
@@ -78,7 +87,7 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 			doorbell,
 			publisher)
 	case TypeCapture:
-		log.Info().Msgf("handle clip task %+v", doorbell)
+		log.Info().Msgf("handle capture task %+v", doorbell)
 		err = runTask(
 			&capture.CaptureTask{},
 			capture.CaptureTaskCfg{},
@@ -93,6 +102,7 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 			publisher)
 
 	default:
+		err = ErrUnknownTaskType
 		goto errHandle
 	}
 	if err != nil {
@@ -100,25 +110,33 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 	}
 	return
 errHandle:
+	log.Error().Msgf("run task error %+v", err)
+	globalerr.GetGlobalErrorChan() <- err
 	buf, _ := json.Marshal(&MsgResp{Code: -1, Msg: err.Error()})
 	publisher.Publish(buf)
 	return
 }
 
 func runTask(t task.AsyncTask, cfg interface{}, doorbell *TaskDoorbell, publisher Publisher) (err error) {
+
+	log.Info().Msgf("Start Decode")
 	err = mapstructure.Decode(doorbell.Cfg, &cfg)
 	if err != nil {
+
 		return err
 	}
+	log.Info().Msgf("Start Init Task", t.GetId())
 	err = t.Init(cfg)
+	log.Info().Msgf("Task Inited: ID(%v)", t.GetId())
+
 	if err != nil {
 		return err
 	}
 	cb := publisher.GetCallback()
-	t.SetCallback(task.EventPrepare, controller.CreateInstanceInDB)
+	//t.SetCallback(task.EventPrepare, controller.CreateInstanceInDB)
 	t.SetCallback(task.EventProgress, cb)
 	t.SetCallback(task.EventDone, cb)
-	t.SetCallback(task.EventDone, controller.PersistResult)
+	//t.SetCallback(task.EventDone, controller.PersistResult)
 	err = t.Start()
 	return err
 }

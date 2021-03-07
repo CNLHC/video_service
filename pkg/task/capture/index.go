@@ -9,9 +9,11 @@ import (
 	"fmt"
 	_ "io"
 	_ "io/ioutil"
+	"os"
+	"path"
 	"strconv"
 
-	_ "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -58,6 +60,11 @@ func (c *CaptureTask) Init(cfg interface{}) (err error) {
 		if err != nil {
 			return err
 		}
+		if t.Dest == "" {
+			log.Warn().Msgf("set default dest")
+			t.Dest = "/home/cn/Project/video_service/data/%05d.jpg"
+		}
+		err = os.MkdirAll(path.Dir(t.Dest), 0777)
 		c.FFMPEGTask.Source = t.Src
 		c.FFMPEGTask.Flags = []string{
 			"-i", fmt.Sprintf("%s", t.Src),
