@@ -39,7 +39,7 @@ func main() {
 	max := 100 * time.Second
 	start := time.Now()
 	for time.Now().Sub(start) < max {
-		msg, err := sub.NextMsg(1 * time.Second)
+		msg, err := sub.NextMsg(100 * time.Second)
 		if err != nil {
 			break
 		}

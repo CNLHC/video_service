@@ -17,12 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	StatusPreparing = "Preparing"
-	StatusRunning   = "Running"
-	StatusDone      = "Done"
-	StatusFail      = "Fail"
-)
+const ()
 
 var (
 	ErrTaskNotStart = errors.New("Task not start")
@@ -41,6 +36,10 @@ type FFMPEGTask struct {
 	meta          video.ProberResp
 }
 
+func (c *FFMPEGTask) GetTaskType() string {
+	return "FFMPEG"
+}
+
 func (c *FFMPEGTask) Terminate() error {
 	if c.cmd == nil {
 		return ErrTaskNotStart
@@ -55,6 +54,7 @@ func (c *FFMPEGTask) Start() error {
 	)
 	c.StartAt = time.Now()
 	log.Info().Msgf("%s start at %s", c.GetId(), c.StartAt)
+	c.RunCallback(task.EventPrepare, c.status, c)
 	prober := video.Prober{}
 	if c.meta, err = prober.Probe(c.Source); err != nil {
 		return err
@@ -74,10 +74,10 @@ func (c *FFMPEGTask) Start() error {
 		"-hide_banner",
 	)
 
-	c.status.Status = StatusPreparing
+	c.status.Status = task.StatusPreparing
 	cmd := exec.Command("ffmpeg", c.Flags...)
 
-	c.status.Status = StatusRunning
+	c.status.Status = task.StatusRunning
 	c.cmd = cmd
 
 	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url, cmd.String())
@@ -121,11 +121,11 @@ func (c *FFMPEGTask) Start() error {
 		goto handleerror
 	}
 
-	c.status.Status = StatusDone
+	c.status.Status = task.StatusDone
 	c.RunCallback(task.EventDone, c.status, c)
 	return nil
 handleerror:
-	c.status.Status = StatusFail
+	c.status.Status = task.StatusFail
 	c.RunCallback(task.EventFail, c.status, c)
 	return err
 }
@@ -208,7 +208,7 @@ func (c *FFMPEGTask) getProgress() (progress float32) {
 	end := c.getEndMs()
 	if end != 0 && cur >= 0 {
 		progress = 100 * float32(cur) / float32(end) / 1000
-		if progress >= 100 && c.status.Status != StatusDone {
+		if progress >= 100 && c.status.Status != task.StatusDone {
 			progress = 99.9
 		}
 	} else {

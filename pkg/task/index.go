@@ -24,9 +24,17 @@ type TaskResult struct {
 type TaskCallback func(c AsyncTask)
 
 const (
+	EventPrepare  = "Prepare"
 	EventProgress = "Progress"
 	EventDone     = "Done"
 	EventFail     = "Fail"
+)
+
+const (
+	StatusPreparing = "Preparing"
+	StatusRunning   = "Running"
+	StatusDone      = "Done"
+	StatusFail      = "Fail"
 )
 
 var (
@@ -44,6 +52,7 @@ type AsyncTask interface {
 	SetCallback(event string, fn TaskCallback)
 
 	Init(cfg interface{}) error
+	GetTaskType() string
 
 	Start() error
 	Terminate() error

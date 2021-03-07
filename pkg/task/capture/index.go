@@ -28,6 +28,10 @@ type CaptureTaskCfg struct {
 	ThumbnailCounts int
 }
 
+func (c *CaptureTask) GetTaskType() string {
+	return "Capture"
+}
+
 func (c *CaptureTask) countsToFPS(cfg CaptureTaskCfg) (fps float64, err error) {
 	var (
 		prober   = video.Prober{}

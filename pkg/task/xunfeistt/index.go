@@ -16,6 +16,8 @@ type XunFeiSTTTask struct {
 	cfg    XunFeiSTTCfg
 	xfsdk  *sdk.XunfeiSDK
 	result string
+	err    error
+	status task.TaskStatus
 }
 
 type XunFeiSTTCfg struct {
@@ -44,12 +46,22 @@ func (c *XunFeiSTTTask) Terminate() (err error) {
 	return task.ErrNotAvailable
 }
 
+func (c *XunFeiSTTTask) GetTaskType() string {
+	return "STT"
+}
+
 func (c *XunFeiSTTTask) Start() (err error) {
+
+	c.status.Status = task.StatusPreparing
+	c.RunCallback(task.EventPrepare, c.status, c)
 	var p poller.Poller
+
+	//for test
 	if c.cfg.TaskId != "" {
 		c.xfsdk.SetTaskID(c.cfg.TaskId)
 		goto getResult
 	}
+
 	log.Info().Msgf("%s prepare start", c.GetId())
 	_, err = c.xfsdk.Prepare(sdk.PrepareReq{Language: c.cfg.Language})
 	if err != nil {
@@ -77,8 +89,14 @@ func (c *XunFeiSTTTask) Start() (err error) {
 			log.Debug().Msgf("task %s check xunfei resp %+v", c.GetId(), resp)
 			t := resp.(sdk.Status)
 			if t.Status == 9 {
+				c.status.Status = task.StatusDone
+				c.RunCallback(task.EventDone, c.status, c)
+				c.status.Progress = 100
 				return nil
 			}
+			c.status.IsRunning = true
+			c.status.Status = task.StatusRunning
+			c.status.Progress = float32(t.Status * 10)
 			err = errors.New("unfinished")
 			return
 		})
@@ -86,6 +104,9 @@ func (c *XunFeiSTTTask) Start() (err error) {
 	err = p.Start()
 
 	if err != nil {
+		c.status.Status = task.StatusFail
+		c.status.IsRunning = false
+		c.RunCallback(task.EventFail, c.status, c)
 		return err
 	}
 
@@ -97,6 +118,9 @@ getResult:
 	log.Debug().Msgf("get result message task(%s) %+v", c.GetId(), resp)
 	c.result = resp.Data
 	return nil
+}
+func (c *XunFeiSTTTask) GetStatus() task.TaskStatus {
+	return c.status
 }
 func (c *XunFeiSTTTask) GetResult() (resp task.TaskResult) {
 	resp.Err = nil

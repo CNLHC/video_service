@@ -4,6 +4,7 @@ import (
 	"argus/video/pkg/config"
 	"argus/video/pkg/poller"
 	"argus/video/pkg/task"
+	"argus/video/pkg/utils"
 	"encoding/json"
 	"io/ioutil"
 	_ "os"
@@ -18,11 +19,17 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// the \lambda of 100(1-exp(x*\lambda)) makes f(60)=90;
+// which means the average time to finish 90% of task is 60s
+const MagicNumber = -0.038376418
+
 type VCATask struct {
 	task.BaseTask
 	status task.TaskStatus
 	cfg    VCATaskCfg
 	cli    *vca.Client
+	result string
+	err    error
 }
 
 type VCATaskCfg struct {
@@ -33,6 +40,15 @@ type VCATaskCfg struct {
 
 type VCATaskResp map[string]interface{}
 
+func (c *VCATask) GetTaskType() string {
+	return "VCA"
+}
+
+func (c *VCATask) GetResult() task.TaskResult {
+	return task.TaskResult{
+		Err:  c.err,
+		Data: c.result}
+}
 func (c *VCATask) Init(cfg interface{}) (err error) {
 	switch cfg.(type) {
 	case VCATaskCfg:
@@ -40,6 +56,8 @@ func (c *VCATask) Init(cfg interface{}) (err error) {
 		AK, SK := config.Get("Baidu_AK"), config.Get("Baidu_SK")
 		ENDPOINT := config.Get("Baidu_endpoint")
 		c.cli, err = vca.NewClient(AK, SK, ENDPOINT)
+		c.BaseTask = task.NewBaseTask()
+
 		return err
 	default:
 		return task.ErrWrongCfg
@@ -48,15 +66,22 @@ func (c *VCATask) Init(cfg interface{}) (err error) {
 
 func (c *VCATask) Start() (err error) {
 	var req api.PutMediaArgs
+	c.RunCallback(task.EventPrepare, c.status, c)
 
+	c.status.StartAt = time.Now()
+	c.status.IsRunning = true
+	c.status.Status = task.StatusPreparing
 	req.Source = c.cfg.Source
 	req.Preset = c.cfg.Preset
 	req.Notification = c.cfg.Notification
+
+	estimator := utils.GetDefaultEstimator()
 
 	log.Info().Msgf("baidu_vca start putting media")
 	c.cli.PutMedia(&req)
 
 	log.Info().Msgf("baidu_vca start polling")
+
 	p := poller.GetBasicPoller(
 		5*time.Second,
 		time.Now().Add(200*time.Second),
@@ -65,13 +90,27 @@ func (c *VCATask) Start() (err error) {
 			return
 		},
 		func(resp interface{}) (err error) {
-			log.Debug().Msgf("task %s check  baidu resp %+v", c.GetId(), resp)
 			t := resp.(MiddleTypeResp)
-			if s, ok := t["source"]; ok {
+			if s, ok := t["status"]; ok {
 				if s == "FINISHED" {
+					c.status.Progress = 100
+					c.status.IsRunning = false
+					c.status.Status = task.StatusDone
+
+					var buf []byte
+					buf, err = json.Marshal(t)
+					c.err = err
+					c.result = string(buf)
+					c.RunCallback(task.EventDone, c.status, c)
 					return nil
 				}
 			} else {
+				c.status.IsRunning = true
+				c.status.Status = task.StatusRunning
+				c.status.Progress = estimator.EstimatePercentage()
+				log.Debug().Msgf("task %s check  baidu resp %+v", c.GetId(), resp)
+
+				c.RunCallback(task.EventProgress, c.status, c)
 				err = errors.New("unfinished")
 			}
 			return

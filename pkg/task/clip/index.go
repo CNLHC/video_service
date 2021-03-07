@@ -29,6 +29,9 @@ type ClipTaskCfg struct {
 	ClipEnd   string
 }
 
+func (c *ClipTask) GetTaskType() string {
+	return "Clip"
+}
 func (c *ClipTask) Init(cfg interface{}) error {
 	switch cfg.(type) {
 	case ClipTaskCfg:

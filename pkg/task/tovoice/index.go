@@ -19,7 +19,9 @@ var (
 
 type ToVoiceTask struct {
 	ffmpeg.FFMPEGTask
-	Cfg ToVoiceCfg
+	Cfg    ToVoiceCfg
+	result string
+	err    error
 }
 
 type ToVoiceCfg struct {

@@ -1,7 +1,9 @@
 package message
 
 import (
+	"argus/video/pkg/controller"
 	"argus/video/pkg/task"
+	"argus/video/pkg/task/baiduvca"
 	"argus/video/pkg/task/capture"
 	"argus/video/pkg/task/clip"
 	"encoding/json"
@@ -14,6 +16,8 @@ import (
 const (
 	TypeClip    = "Clip"
 	TypeCapture = "Capture"
+	TypeVCA     = "VCA"
+	TypeSTT     = "STT"
 )
 
 type Subscriber struct {
@@ -73,12 +77,18 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 			clip.ClipTaskCfg{},
 			doorbell,
 			publisher)
-
 	case TypeCapture:
 		log.Info().Msgf("handle clip task %+v", doorbell)
 		err = runTask(
 			&capture.CaptureTask{},
 			capture.CaptureTaskCfg{},
+			doorbell,
+			publisher)
+	case TypeVCA:
+		log.Info().Msgf("handle vca task %+v", doorbell)
+		err = runTask(
+			&baiduvca.VCATask{},
+			baiduvca.VCATaskCfg{},
 			doorbell,
 			publisher)
 
@@ -105,8 +115,10 @@ func runTask(t task.AsyncTask, cfg interface{}, doorbell *TaskDoorbell, publishe
 		return err
 	}
 	cb := publisher.GetCallback()
-	t.SetCallback(task.EventDone, cb)
+	t.SetCallback(task.EventPrepare, controller.CreateInstanceInDB)
 	t.SetCallback(task.EventProgress, cb)
+	t.SetCallback(task.EventDone, cb)
+	t.SetCallback(task.EventDone, controller.PersistResult)
 	err = t.Start()
 	return err
 }

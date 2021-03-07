@@ -1,0 +1,8 @@
+{
+    "Type": "VCA",
+    "Cfg": {
+        "Source": "https://publicstatic.cnworkshop.xyz/index.mp4",
+        "Preset": "demo",
+        "Notification": ""
+    }
+}
