@@ -96,7 +96,6 @@ func (c *VCATask) Start() (err error) {
 					c.status.Progress = 100
 					c.status.IsRunning = false
 					c.status.Status = task.StatusDone
-
 					var buf []byte
 					buf, err = json.Marshal(t)
 					c.err = err
