@@ -12,6 +12,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	nats "github.com/nats-io/nats.go"
+	"github.com/nsqio/go-nsq"
 	"github.com/rs/zerolog/log"
 )
 
@@ -31,43 +32,47 @@ type Subscriber struct {
 }
 
 type MsgResp struct {
-	Code int
-	Msg  string
+	RequestID string `json:"RequestID"`
+	Msg       string `json:"Msg"`
+	State     string `json:"State"`
+	ErrorMsg  string `json:"ErrorMsg"`
 }
 type TaskDoorbell struct {
-	Type string
-	Cfg  map[string]interface{}
+	RequestID string `json:"RequestID"`
+	Type      string `json:"Type"`
+	Reply     string `json:"Reply"`
+	Cfg       map[string]interface{}
 }
 
-func errorHandler(nc *nats.Conn, s *nats.Subscription, err error) {
-	log.Error().Msgf("msg error %+v", err)
-
+type NSQMsgHandler struct {
+	ErrChan chan error
 }
-func msgHandler(msg *nats.Msg) {
-	var (
-		err error
-	)
 
-	log.Info().Msgf("receive msg: data(%s) respond:(%s)", string(msg.Data), msg.Reply)
-	var doorbell TaskDoorbell
-	p := Publisher{Msg: msg}
+func (c *NSQMsgHandler) HandleMessage(msg *nsq.Message) (err error) {
+	var door_bell TaskDoorbell
 
-	err = json.Unmarshal(msg.Data, &doorbell)
+	err = json.Unmarshal(msg.Body, &door_bell)
 	if err != nil {
-		log.Error().Msgf("error msg %s", err.Error())
-		return
+		c.ErrChan <- err
+		msg.Finish()
 	}
-	_ = p
-	LaunchTaskAndWait(&doorbell, p)
+	p := Publisher{Reply: door_bell.Reply}
+	err = LaunchTaskAndWait(&door_bell, p)
+
+	if err != nil {
+		buf, _ := json.Marshal(&MsgResp{ErrorMsg: err.Error()})
+		p.Publish(buf)
+		msg.Requeue(-1)
+	}
+
+	msg.Finish()
+	return
 }
 
-func (c *Subscriber) Subscribe() (sub *nats.Subscription, err error) {
-	nc, err := nats.Connect(
-		"core1.cnworkshop.xyz:24222",
-		nats.ErrorHandler(errorHandler))
-
-	c.sub, err = nc.QueueSubscribe("updates", "default", msgHandler)
-	sub = c.sub
+func (c *Subscriber) Subscribe() (err error) {
+	nsq := GetNSQConsumer()
+	handler := NSQMsgHandler{}
+	nsq.AddConcurrentHandlers(&handler, 20)
 
 	if err != nil {
 		return
@@ -75,9 +80,7 @@ func (c *Subscriber) Subscribe() (sub *nats.Subscription, err error) {
 	return
 }
 
-func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
-	var err error
-
+func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) (err error) {
 	switch doorbell.Type {
 	case TypeClip:
 		log.Info().Msgf("handle clip task %+v", doorbell)
@@ -112,8 +115,6 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) {
 errHandle:
 	log.Error().Msgf("run task error %+v", err)
 	globalerr.GetGlobalErrorChan() <- err
-	buf, _ := json.Marshal(&MsgResp{Code: -1, Msg: err.Error()})
-	publisher.Publish(buf)
 	return
 }
 

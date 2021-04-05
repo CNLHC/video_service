@@ -6,7 +6,6 @@ import (
 	_ "fmt"
 	"time"
 
-	nats "github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
 )
 
@@ -14,11 +13,13 @@ type Publisher struct {
 	first_msg_published bool
 	last_published      time.Time
 	Limit               time.Duration
-	Msg                 *nats.Msg
+	Reply               string
+	// Msg                 *nats.Msg
 }
 
 func (p *Publisher) Publish(message []byte) (err error) {
-	err = p.Msg.Respond(message)
+	nc := GetNATSConn()
+	err = nc.Publish(p.Reply, message)
 	if err != nil {
 		log.Error().Msgf("publish error %+v", err)
 	}
