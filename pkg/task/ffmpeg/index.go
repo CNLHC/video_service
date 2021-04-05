@@ -47,25 +47,24 @@ func (c *FFMPEGTask) Terminate() error {
 	return c.cmd.Process.Kill()
 }
 
-func (c *FFMPEGTask) Start() error {
+func (c *FFMPEGTask) prepareFFMPEG() (err error) {
 	var (
-		ln  net.Listener
-		err error
+		ln net.Listener
 	)
+
+	c.status.Status = task.StatusPreparing
 	c.StartAt = time.Now()
-	log.Info().Msgf("%s start at %s", c.GetId(), c.StartAt)
+	log.Info().Msgf("%s start at %s: source(%s) %+v", c.GetId(), c.StartAt, c.Source, c)
 	c.RunCallback(task.EventPrepare, c.status, c)
 	prober := video.Prober{}
 	if c.meta, err = prober.Probe(c.Source); err != nil {
 		return err
 	}
-
 	ln, err = net.Listen("tcp", "127.0.0.1:0")
 	c.progress_sock = ln
 	if err != nil {
 		return err
 	}
-
 	url := fmt.Sprintf("tcp://%s", ln.Addr().String())
 
 	c.Flags = append(
@@ -74,39 +73,71 @@ func (c *FFMPEGTask) Start() error {
 		"-hide_banner",
 	)
 
-	c.status.Status = task.StatusPreparing
-	cmd := exec.Command("ffmpeg", c.Flags...)
+	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url)
+	return
+}
 
+func (c *FFMPEGTask) Start() error {
+	var (
+		err            error
+		timeout_ticker = time.NewTicker(10 * time.Minute)
+		err_ch         = make(chan error, 1)
+	)
+
+	err = c.prepareFFMPEG()
+	if err != nil {
+		goto finish
+	}
+
+	c.cmd = exec.Command("ffmpeg", c.Flags...)
 	c.status.Status = task.StatusRunning
-	c.cmd = cmd
+	go c.waitProcessExit(err_ch)
+	go c.wait(err_ch)
 
-	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url, cmd.String())
+	select {
+	case <-timeout_ticker.C:
+		err = task.ErrTimeout
+	case e := <-err_ch:
+		err = e
+	}
 
-	log.Printf("cmd:%s", cmd.String())
+finish:
+	if c.cmd != nil &&
+		c.cmd.ProcessState != nil &&
+		!c.cmd.ProcessState.Exited() {
+		c.cmd.Process.Kill()
+	}
+	if err != nil {
+		c.status.Status = task.StatusFail
+		c.RunCallback(task.EventFail, c.status, c)
+	} else {
+		c.status.Status = task.StatusDone
+		c.RunCallback(task.EventDone, c.status, c)
+	}
 
+	return err
+}
+func (c *FFMPEGTask) waitProcessExit(ch chan error) {
+	cmd := c.cmd
 	var outBuf []byte
 	var errBuf []byte
+
 	reader, err := cmd.StderrPipe()
 	if err != nil {
 		log.Error().Msgf("%s", err.Error())
 	}
+
 	outReader, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Error().Msgf("%s", err.Error())
 	}
-	err = cmd.Start()
-	if err != nil {
-		log.Error().Msgf("%s", err.Error())
-	}
 
-	go c.wait()
+	err = c.cmd.Start()
 	if err != nil {
-		log.Error().Msgf("%s", err.Error())
+		ch <- err
 	}
 	outBuf, _ = ioutil.ReadAll(outReader)
 	errBuf, _ = ioutil.ReadAll(reader)
-	_ = outBuf
-	_ = errBuf
 	log.Printf("output %s", string(outBuf))
 	log.Printf("error %s", string(errBuf))
 	cmd.Wait()
@@ -120,14 +151,11 @@ func (c *FFMPEGTask) Start() error {
 		err = errors.New("ffmpeg has non-zero exit code")
 		goto handleerror
 	}
-
-	c.status.Status = task.StatusDone
-	c.RunCallback(task.EventDone, c.status, c)
-	return nil
+	ch <- nil
+	return
 handleerror:
-	c.status.Status = task.StatusFail
-	c.RunCallback(task.EventFail, c.status, c)
-	return err
+	ch <- err
+
 }
 
 func (c *FFMPEGTask) Init(cfg interface{}) error {
@@ -138,7 +166,7 @@ func (c *FFMPEGTask) Init(cfg interface{}) error {
 	return nil
 }
 
-func (c *FFMPEGTask) wait() {
+func (c *FFMPEGTask) wait(ch chan error) {
 	var (
 		buf = make([]byte, 1024)
 	)

@@ -1,10 +1,11 @@
 package xunfeistt
 
 import (
-	"github.com/joho/godotenv"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/joho/godotenv"
 )
 
 func TestXunfeiBasic(t *testing.T) {
@@ -22,5 +23,4 @@ func TestXunfeiBasic(t *testing.T) {
 	err = task.Start()
 	t.Logf("result :%+v", task.GetResult())
 	t.Logf("error :%+v", err)
-
 }

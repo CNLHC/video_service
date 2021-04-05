@@ -81,7 +81,7 @@ func (c *VodTranscode) parseVodStatus(resp *vod.GetTranscodeTaskResponse) (isTer
 		}
 	}
 
-	c.status.Progress = int(int(totalProcess) / len(resp.TranscodeTask.TranscodeJobInfoList))
+	c.status.Progress = (int(totalProcess) / len(resp.TranscodeTask.TranscodeJobInfoList))
 	c.status.Status = resp.TranscodeTask.TaskStatus
 	ts := c.status.Status
 	if ts == "Processing" || ts == "Partial" {

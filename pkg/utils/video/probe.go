@@ -2,10 +2,12 @@ package video
 
 import (
 	"encoding/json"
-	"github.com/rs/zerolog/log"
 	"io"
 	"io/ioutil"
 	"os/exec"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 type ProberResp struct {
@@ -52,17 +54,19 @@ func (Prober) Probe(fp string) (resp ProberResp, err error) {
 		fp,
 	)
 
-	stdout, err = cmd.StdoutPipe()
-	stderr, err = cmd.StderrPipe()
+	stdout, _ = cmd.StdoutPipe()
+	stderr, _ = cmd.StderrPipe()
 	log.Info().Msgf("probe of %s. cmd is: %s", fp, cmd.String())
 	err = cmd.Start()
-	buf, err = ioutil.ReadAll(stdout)
-	errbuf, err = ioutil.ReadAll(stderr)
+	if err != nil {
+		err = errors.Wrap(err, "prober error")
+		return
+	}
+	buf, _ = ioutil.ReadAll(stdout)
+	errbuf, _ = ioutil.ReadAll(stderr)
 	err = cmd.Wait()
 	if err != nil {
-		return resp, err
-	}
-	if err != nil {
+		err = errors.Wrap(err, "prober error")
 		return resp, err
 	}
 	log.Info().Msgf("probe of %s is %s", fp, string(buf))

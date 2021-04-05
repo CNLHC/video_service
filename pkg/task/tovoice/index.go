@@ -30,9 +30,9 @@ type ToVoiceCfg struct {
 }
 
 func (c *ToVoiceTask) Init(cfg interface{}) error {
-	switch cfg.(type) {
+	switch t := cfg.(type) {
 	case ToVoiceCfg:
-		c.Cfg = cfg.(ToVoiceCfg)
+		c.Cfg = t
 		c.FFMPEGTask.Flags = []string{
 			"-i", c.Cfg.Src,
 			"-vn",
@@ -41,6 +41,7 @@ func (c *ToVoiceTask) Init(cfg interface{}) error {
 			"-ac", "1",
 			"-y", c.Cfg.Dest,
 		}
+		c.FFMPEGTask.Source = t.Src
 		c.BaseTask = task.NewBaseTask()
 		return nil
 	default:
@@ -53,10 +54,4 @@ func (c *ToVoiceTask) Init(cfg interface{}) error {
 func (c *ToVoiceTask) GetResult() (resp task.TaskResult) {
 	resp.Err = nil
 	return
-}
-
-func NewToVoiceTask(cfg ToVoiceCfg) (res *ToVoiceTask) {
-	res = &ToVoiceTask{Cfg: cfg}
-	res.Init(cfg)
-	return res
 }

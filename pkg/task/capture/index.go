@@ -41,6 +41,9 @@ func (c *CaptureTask) countsToFPS(cfg CaptureTaskCfg) (fps float64, err error) {
 		duration float64
 	)
 	format, err = prober.Probe(cfg.Src)
+	if err != nil {
+		return
+	}
 	duration, err = strconv.ParseFloat(format.Format.Duration, 64)
 	if err != nil {
 		return fps, err
@@ -53,9 +56,8 @@ func (c *CaptureTask) countsToFPS(cfg CaptureTaskCfg) (fps float64, err error) {
 func (c *CaptureTask) Init(cfg interface{}) (err error) {
 	var fps float64
 
-	switch cfg.(type) {
+	switch t := cfg.(type) {
 	case CaptureTaskCfg:
-		t := cfg.(CaptureTaskCfg)
 		fps, err = c.countsToFPS(t)
 		if err != nil {
 			return err
@@ -73,12 +75,9 @@ func (c *CaptureTask) Init(cfg interface{}) (err error) {
 			"-y", t.Dest,
 		}
 		c.BaseTask = task.NewBaseTask()
+		log.Printf("cccc %+v", c)
+	default:
+		return task.ErrWrongCfg
 	}
 	return err
-}
-
-func NewCaptureTask(cfg CaptureTaskCfg) (res *CaptureTask) {
-	res = &CaptureTask{}
-	res.Init(cfg)
-	return res
 }

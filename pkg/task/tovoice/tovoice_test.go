@@ -1,27 +1,32 @@
 package tovoice
 
 import (
-	"path/filepath"
-	"runtime"
+	testutil "argus/video/pkg/utils/test"
+	"path"
 	"testing"
 )
 
 func TestTovoice(t *testing.T) {
+	base := testutil.GetGoModuleRoot()
 
-	_, filename, _, _ := runtime.Caller(0)
-	dir := filepath.Dir(filename)
+	dest := path.Join(base, "/data/index.mp3")
+	src := path.Join(base, "/data/index.mp4")
 
 	cfg := ToVoiceCfg{
-		Src: filepath.Join(dir, "..", "..", "..", "data", "index.mp4"),
-
-		Dest: filepath.Join(dir, "..", "..", "..", "data", "index.mp3"),
+		Src:  src,
+		Dest: dest,
 	}
-	task := NewToVoiceTask(cfg)
+	t.Logf("%+v", cfg)
+	task := &ToVoiceTask{}
 	err := task.Init(cfg)
-	t.Logf("err %+v", err)
-	err = task.Start()
-	t.Logf("err %+v", err)
 	if err != nil {
-		t.Errorf("%+v", err)
+		t.Errorf("init err %+v", err)
+		return
+	}
+
+	err = task.Start()
+	if err != nil {
+		t.Errorf("run err %+v", err)
+		return
 	}
 }
