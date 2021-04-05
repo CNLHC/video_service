@@ -1,0 +1,13 @@
+[
+    {
+        "Bucket": "argus-test",
+        "Location": "oss-cn-beijing",
+        "Object": "161543660890534973.mp4"
+    },
+    [
+        {
+            "OutputObject": "161543660890534973_transcode.flv",
+            "TemplateId": "99984fc4f153403aa03d24a99226d1d0"
+        }
+    ]
+]
