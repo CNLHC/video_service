@@ -1,12 +1,17 @@
 package poller
 
 import (
+	"errors"
 	"time"
 )
 
 type Poller interface {
 	Start() error
 }
+
+var (
+	ErrFatal = errors.New("Fatal error")
+)
 
 type ReqFn func() (res interface{}, err error)
 type CheckRespFn func(resp interface{}) error
@@ -28,6 +33,10 @@ func (c *basicPoller) Start() (err error) {
 		}
 		if err2 := c.CheckResp(resp); err2 == nil {
 			return
+		} else {
+			if errors.Is(err2, ErrFatal) {
+				return err2
+			}
 		}
 	}
 	return
