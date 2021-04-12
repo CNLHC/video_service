@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -31,15 +31,18 @@ var loader sync.Once
 
 func GetDB() *gorm.DB {
 	loader.Do(func() {
-		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Shanghai",
-			config.Get("PG_HOST"),
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=True&loc=Local",
 			config.Get("PG_USER"),
 			config.Get("PG_PASSWORD"),
-			config.Get("PG_DB"),
+			config.Get("PG_HOST"),
 			config.Get("PG_PORT"),
+			config.Get("PG_DB"),
 		)
+		cfg := mysql.Config{
+			DSN: dsn,
+		}
 
-		if db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Info)}); err != nil {
+		if db, err := gorm.Open(mysql.New(cfg)); err != nil {
 			panic(err)
 		} else {
 			_db = db

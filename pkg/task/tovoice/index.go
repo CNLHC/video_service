@@ -29,9 +29,16 @@ type ToVoiceCfg struct {
 	Dest string
 }
 
+func (c *ToVoiceTask) GetTaskType() string {
+	return "ToVoice"
+}
+
 func (c *ToVoiceTask) Init(cfg interface{}) error {
 	switch t := cfg.(type) {
 	case ToVoiceCfg:
+		if t.Src == "" || t.Dest == "" {
+			return task.ErrWrongCfg
+		}
 		c.Cfg = t
 		c.FFMPEGTask.Flags = []string{
 			"-i", c.Cfg.Src,
@@ -46,7 +53,6 @@ func (c *ToVoiceTask) Init(cfg interface{}) error {
 		return nil
 	default:
 		log.Error().Msgf("wrong type for clip %+v", reflect.TypeOf(cfg))
-
 	}
 	return task.ErrWrongCfg
 }

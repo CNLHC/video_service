@@ -14,24 +14,18 @@ var load_nsq_producer_once sync.Once
 var _nc *nats.Conn
 var load_nc_once sync.Once
 
-func GetNSQConsumer() *nsq.Consumer {
-	load_nsq_producer_once.Do(func() {
-		var err error
-		nsq_cfg := nsq.NewConfig()
-		_consumer, err = nsq.NewConsumer(
-			config.Get("NSQ_SUBJECT"),
-			config.Get("NSQ_CHANNEL"),
-			nsq_cfg,
-		)
-		if err != nil {
-			panic(err)
-		}
-		err = _consumer.ConnectToNSQD(config.Get("NSQD_URL"))
-		if err != nil {
-			panic(err)
-		}
+func GetNSQConsumer(subject string) *nsq.Consumer {
+	var err error
+	nsq_cfg := nsq.NewConfig()
+	_consumer, err = nsq.NewConsumer(
+		subject,
+		config.Get("NSQ_CHANNEL"),
+		nsq_cfg,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-	})
 	return _consumer
 }
 
@@ -48,8 +42,6 @@ func GetNATSConn() *nats.Conn {
 		if err != nil {
 			panic(err)
 		}
-
 	})
 	return _nc
-
 }

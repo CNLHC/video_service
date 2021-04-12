@@ -17,9 +17,11 @@ type Publisher struct {
 	// Msg                 *nats.Msg
 }
 
-func (p *Publisher) Publish(message []byte) (err error) {
+func (p *Publisher) Publish(resp task.BaseAsyncTaskResp) (err error) {
 	nc := GetNATSConn()
-	err = nc.Publish(p.Reply, message)
+
+	buf, _ := json.Marshal(resp)
+	err = nc.Publish(p.Reply, buf)
 	if err != nil {
 		log.Error().Msgf("publish error %+v", err)
 	}
@@ -40,8 +42,10 @@ func (p *Publisher) GetCallback() task.TaskCallback {
 			log.Info().Msgf("task(%d) callback is invoked", c.GetId())
 			status := c.GetStatus()
 			//topic := fmt.Sprintf("%s.status", c.GetId())
-			msg, _ := json.Marshal(status)
-			if err := p.Publish(msg); err != nil {
+			if err := p.Publish(task.BaseAsyncTaskResp{
+				RequestID: status.RequestID,
+				Data:      status,
+			}); err != nil {
 				p.first_msg_published = true
 			}
 		}

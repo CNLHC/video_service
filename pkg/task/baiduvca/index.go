@@ -53,6 +53,9 @@ func (c *VCATask) Init(cfg interface{}) (err error) {
 	switch cfg.(type) {
 	case VCATaskCfg:
 		c.cfg = cfg.(VCATaskCfg)
+		if c.cfg.Source == "" || c.cfg.Preset == "" {
+			return task.ErrWrongCfg
+		}
 		AK, SK := config.Get("Baidu_AK"), config.Get("Baidu_SK")
 		ENDPOINT := config.Get("Baidu_endpoint")
 		c.cli, err = vca.NewClient(AK, SK, ENDPOINT)

@@ -9,6 +9,7 @@ import (
 
 type TaskMeta map[string]interface{}
 type TaskStatus struct {
+	RequestID string
 	IsRunning bool
 	Progress  float32
 	Status    string
@@ -44,6 +45,12 @@ var (
 	ErrTimeout       = errors.New("Timeout")
 )
 
+type BaseAsyncTaskResp struct {
+	RequestID string      `json:"RequestID"`
+	State     string      `json:"State"`
+	ErrorMsg  string      `json:"ErrorMsg"`
+	Data      interface{} `json:"Data"`
+}
 type AsyncTask interface {
 	GetId() uuid.UUID
 	GetMeta(key string) (interface{}, bool)

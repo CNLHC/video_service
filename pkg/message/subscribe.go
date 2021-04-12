@@ -1,12 +1,15 @@
 package message
 
 import (
+	"argus/video/pkg/config"
 	_ "argus/video/pkg/controller"
-	"argus/video/pkg/globalerr"
 	"argus/video/pkg/task"
 	"argus/video/pkg/task/baiduvca"
 	"argus/video/pkg/task/capture"
 	"argus/video/pkg/task/clip"
+	"argus/video/pkg/task/mts_transcode"
+	"argus/video/pkg/task/tovoice"
+	"argus/video/pkg/task/xunfeistt"
 	"encoding/json"
 	"errors"
 
@@ -17,10 +20,12 @@ import (
 )
 
 const (
-	TypeClip    = "Clip"
-	TypeCapture = "Capture"
-	TypeVCA     = "VCA"
-	TypeSTT     = "STT"
+	TypeClip      = "Clip"
+	TypeCapture   = "Capture"
+	TypeVCA       = "VCA"
+	TypeSTT       = "STT"
+	TypeTranscode = "Transcode"
+	TypeToVoice   = "ToVoice"
 )
 
 var (
@@ -28,7 +33,10 @@ var (
 )
 
 type Subscriber struct {
-	sub *nats.Subscription
+	sub           *nats.Subscription
+	TaskType      string
+	MaxConcurrent int
+	Task          task.AsyncTask
 }
 
 type MsgResp struct {
@@ -45,65 +53,77 @@ type TaskDoorbell struct {
 }
 
 type NSQMsgHandler struct {
-	ErrChan chan error
 }
 
 func (c *NSQMsgHandler) HandleMessage(msg *nsq.Message) (err error) {
 	var door_bell TaskDoorbell
 
 	err = json.Unmarshal(msg.Body, &door_bell)
+	log.Info().
+		Str("Action", "Handle NSQ Message").
+		Msgf("Request: %s", door_bell)
+
 	if err != nil {
-		c.ErrChan <- err
-		msg.Finish()
+		log.Error().
+			Str("Action", "Handle NSQ Message").
+			Err(err)
 	}
+
 	p := Publisher{Reply: door_bell.Reply}
+
+	log.Error().
+		Str("Action", "Handle NSQ Message").
+		Str("Stage", "LaunchTaskAndWait").Msg("")
+
 	err = LaunchTaskAndWait(&door_bell, p)
 
 	if err != nil {
-		buf, _ := json.Marshal(&MsgResp{ErrorMsg: err.Error()})
-		p.Publish(buf)
-		msg.Requeue(-1)
+		log.Error().
+			Str("Action", "Handle NSQ Message").
+			Err(err)
+		p.Publish(task.BaseAsyncTaskResp{
+			State:    task.StatusFail,
+			ErrorMsg: err.Error(),
+		})
 	}
 
+	log.Error().
+		Str("Action", "Handle NSQ Message").
+		Str("Stage", "Finish").Msg("")
 	msg.Finish()
-	return
+	return nil
 }
 
 func (c *Subscriber) Subscribe() (err error) {
-	nsq := GetNSQConsumer()
+	log.Info().Str("TaskType", c.TaskType).Msgf("Register Service")
+	_nsq := GetNSQConsumer(c.TaskType)
 	handler := NSQMsgHandler{}
-	nsq.AddConcurrentHandlers(&handler, 20)
+	_nsq.AddConcurrentHandlers(&handler, c.MaxConcurrent)
 
+	err = _consumer.ConnectToNSQD(config.Get("NSQ_URL"))
 	if err != nil {
-		return
+		panic(err)
 	}
 	return
 }
 
 func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) (err error) {
+	log.Info().
+		Str("Action", "LaunchTaskAndWait").
+		Str("TaskType", TypeClip).Msg("Run")
 	switch doorbell.Type {
 	case TypeClip:
-		log.Info().Msgf("handle clip task %+v", doorbell)
-		err = runTask(
-			&clip.ClipTask{},
-			clip.ClipTaskCfg{},
-			doorbell,
-			publisher)
+		err = runTask(&clip.ClipTask{}, clip.ClipTaskCfg{}, doorbell, publisher)
 	case TypeCapture:
-		log.Info().Msgf("handle capture task %+v", doorbell)
-		err = runTask(
-			&capture.CaptureTask{},
-			capture.CaptureTaskCfg{},
-			doorbell,
-			publisher)
+		err = runTask(&capture.CaptureTask{}, capture.CaptureTaskCfg{}, doorbell, publisher)
 	case TypeVCA:
-		log.Info().Msgf("handle vca task %+v", doorbell)
-		err = runTask(
-			&baiduvca.VCATask{},
-			baiduvca.VCATaskCfg{},
-			doorbell,
-			publisher)
-
+		err = runTask(&baiduvca.VCATask{}, baiduvca.VCATaskCfg{}, doorbell, publisher)
+	case TypeToVoice:
+		err = runTask(&tovoice.ToVoiceTask{}, tovoice.ToVoiceCfg{}, doorbell, publisher)
+	case TypeTranscode:
+		err = runTask(&mts_transcode.MTSTranscode{}, &mts_transcode.MTSTranscodeCfg{}, doorbell, publisher)
+	case TypeSTT:
+		err = runTask(&xunfeistt.XunFeiSTTTask{}, &xunfeistt.XunFeiSTTCfg{}, doorbell, publisher)
 	default:
 		err = ErrUnknownTaskType
 		goto errHandle
@@ -113,31 +133,50 @@ func LaunchTaskAndWait(doorbell *TaskDoorbell, publisher Publisher) (err error) 
 	}
 	return
 errHandle:
-	log.Error().Msgf("run task error %+v", err)
-	globalerr.GetGlobalErrorChan() <- err
+	log.Error().
+		Str("Action", "LaunchTaskAndWait").
+		Err(err)
 	return
 }
 
 func runTask(t task.AsyncTask, cfg interface{}, doorbell *TaskDoorbell, publisher Publisher) (err error) {
 
-	log.Info().Msgf("Start Decode")
+	log.Info().
+		Str("RequestID", doorbell.RequestID).
+		Str("Action", "Decode Struct")
+
 	err = mapstructure.Decode(doorbell.Cfg, &cfg)
 	if err != nil {
-
 		return err
 	}
-	log.Info().Msgf("Start Init Task", t.GetId())
+
+	log.Info().
+		Str("RequestID", doorbell.RequestID).
+		Str("Action", "Init Task")
 	err = t.Init(cfg)
-	log.Info().Msgf("Task Inited: ID(%v)", t.GetId())
 
 	if err != nil {
+		log.Error().
+			Str("RequestID", doorbell.RequestID).
+			Msgf("Task Inited Failed", t.GetId())
 		return err
 	}
+	log.Info().
+		Str("RequestID", doorbell.RequestID).
+		Msgf("Task Inited: ID(%v)", t.GetId())
+
 	cb := publisher.GetCallback()
 	//t.SetCallback(task.EventPrepare, controller.CreateInstanceInDB)
 	t.SetCallback(task.EventProgress, cb)
 	t.SetCallback(task.EventDone, cb)
 	//t.SetCallback(task.EventDone, controller.PersistResult)
 	err = t.Start()
+	if err != nil {
+		log.Error().
+			Str("RequestID", doorbell.RequestID).
+			Str("Action", "Run Task").
+			Err(err)
+		return err
+	}
 	return err
 }

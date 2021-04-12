@@ -72,7 +72,6 @@ func (c *FFMPEGTask) prepareFFMPEG() (err error) {
 		"-progress", url,
 		"-hide_banner",
 	)
-
 	log.Info().Msgf("FFMPeg Task %s:  Listen at %s, cmd is %s", c.GetId().String(), url)
 	return
 }

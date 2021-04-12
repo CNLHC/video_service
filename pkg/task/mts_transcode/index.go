@@ -37,9 +37,16 @@ type MTSTranscodeCfg struct {
 	Src    string
 }
 
+func (c *MTSTranscode) GetTaskType() string {
+	return "Transcode"
+
+}
 func (c *MTSTranscode) Init(cfg interface{}) (err error) {
 	switch t := cfg.(type) {
 	case MTSTranscodeCfg:
+		if t.Bucket == "" || t.Src == "" {
+			return task.ErrWrongCfg
+		}
 		c.cfg = t
 		c.location = "oss-cn-beijing"
 		c.AliVodTask.Init(alivod.AliVodTaskCfg{})
